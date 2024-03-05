@@ -2,10 +2,12 @@
 
 import struct, io, binascii, itertools, collections, pickle, sys, os, hashlib, importlib, importlib.machinery, importlib.util
 
+from construct.bytes import BytesArrayIO
 from construct.lib import *
 from construct.expr import *
 from construct.version import *
 
+BaseBytesIO = BytesArrayIO # BaseBytesIO
 
 #===============================================================================
 # exceptions
@@ -235,7 +237,7 @@ def stream_iseof(stream):
         raise StreamError("stream. read() seek() tell() failed", path="???")
 
 
-class BytesIOWithOffsets(io.BytesIO):
+class BytesIOWithOffsets(BaseBytesIO):
     @staticmethod
     def from_reading(stream, length: int, path: str):
         offset = stream_tell(stream, path)
@@ -401,7 +403,7 @@ class Construct(object):
 
         :raises ConstructError: raised for any reason
         """
-        return self.parse_stream(io.BytesIO(data), **contextkw)
+        return self.parse_stream(BaseBytesIO(data), **contextkw)
 
     def parse_stream(self, stream, **contextkw):
         r"""
@@ -448,7 +450,7 @@ class Construct(object):
 
         :raises ConstructError: raised for any reason
         """
-        stream = io.BytesIO()
+        stream = BaseBytesIO()
         self.build_stream(obj, stream, **contextkw)
         return stream.getvalue()
 
@@ -872,7 +874,7 @@ class Tunnel(Subconstruct):
         return self.subcon.parse(data, **context)
 
     def _build(self, obj, stream, context, path):
-        stream2 = io.BytesIO()
+        stream2 = BaseBytesIO()
         buildret = self.subcon._build(obj, stream2, context, path)
         data = stream2.getvalue()
         data = self._encode(data, context, path)
@@ -4870,7 +4872,7 @@ class Prefixed(Subconstruct):
         return self.subcon._parsereport(substream, context, path)
 
     def _build(self, obj, stream, context, path):
-        stream2 = io.BytesIO()
+        stream2 = BaseBytesIO()
         buildret = self.subcon._build(obj, stream2, context, path)
         data = stream2.getvalue()
         length = len(data)
@@ -4995,7 +4997,7 @@ class FixedSized(Subconstruct):
         length = evaluate(self.length, context)
         if length < 0:
             raise PaddingError("length cannot be negative", path=path)
-        stream2 = io.BytesIO()
+        stream2 = BaseBytesIO()
         buildret = self.subcon._build(obj, stream2, context, path)
         data = stream2.getvalue()
         pad = length - len(data)
@@ -5184,11 +5186,11 @@ class RestreamData(Subconstruct):
     def _parse(self, stream, context, path):
         data = evaluate(self.datafunc, context)
         if isinstance(data, bytes):
-            stream2 = io.BytesIO(data)
-        if isinstance(data, io.BytesIO):
+            stream2 = BaseBytesIO(data)
+        if isinstance(data, BaseBytesIO):
             stream2 = data
         if isinstance(data, Construct):
-            stream2 = io.BytesIO(data._parsereport(stream, context, path))
+            stream2 = BaseBytesIO(data._parsereport(stream, context, path))
         return self.subcon._parsereport(stream2, context, path)
 
     def _build(self, obj, stream, context, path):
@@ -5251,10 +5253,10 @@ class Transformed(Subconstruct):
         if isinstance(self.decodeamount, int):
             data = stream_read(stream, self.decodeamount, path)
         data = self.decodefunc(data)
-        return self.subcon._parsereport(io.BytesIO(data), context, path)
+        return self.subcon._parsereport(BaseBytesIO(data), context, path)
 
     def _build(self, obj, stream, context, path):
-        stream2 = io.BytesIO()
+        stream2 = BaseBytesIO()
         buildret = self.subcon._build(obj, stream2, context, path)
         data = stream2.getvalue()
         data = self.encodefunc(data)
@@ -5376,7 +5378,7 @@ class ProcessXor(Subconstruct):
             raise StringError("ProcessXor needs integer or bytes pad", path=path)
         if isinstance(pad, bytes) and len(pad) == 1:
             pad = byte2int(pad)
-        stream2 = io.BytesIO()
+        stream2 = BaseBytesIO()
         buildret = self.subcon._build(obj, stream2, context, path)
         data = stream2.getvalue()
         if isinstance(pad, int):
@@ -5459,7 +5461,7 @@ class ProcessRotateLeft(Subconstruct):
             indices_pairs = [ ((i+amount_bytes) % group, (i+1+amount_bytes) % group) for i in range(group)]
             data = bytes((data[i+k1] << amount1) & 0xff | (data[i+k2] >> amount2) for i in range(0,len(data),group) for k1,k2 in indices_pairs)
 
-        return self.subcon._parsereport(io.BytesIO(data), context, path)
+        return self.subcon._parsereport(BaseBytesIO(data), context, path)
 
     def _build(self, obj, stream, context, path):
         amount = evaluate(self.amount, context)
@@ -5469,7 +5471,7 @@ class ProcessRotateLeft(Subconstruct):
 
         amount = -amount % (group * 8)
         amount_bytes = amount // 8
-        stream2 = io.BytesIO()
+        stream2 = BaseBytesIO()
         buildret = self.subcon._build(obj, stream2, context, path)
         data = stream2.getvalue()
 
